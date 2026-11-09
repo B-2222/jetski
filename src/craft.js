@@ -25,7 +25,15 @@ export const CRAFTS = {
     beam: 1.25,               // m (spec sheet)
     chineBeam: 1.06,          // m planing bottom width at the chines (est)
     deadrise: 22,             // deg at transom (est, T3-R is a deep V)
-    hullLatGrip: 0.9,        // how much the V-bottom resists side slip (tuning)
+    hullLatGrip: 0.75,        // how much the V-bottom resists side slip (tuning)
+    slideGrip: 0.5,          // fraction of hull side grip left once it is skating sideways (tuned)
+    steerAngle: 25,
+    sternGrip: 0.5,
+    critTrim: 5,           // deg running trim where porpoising starts (est)
+    porpoiseGain: 900,       // how hard it porpoises past that (tuned)
+    porpoiseCap: 720,        // Nm limit on the porpoising drive (tuned)
+    popPower: 1.3,           // freestyle pop strength (game tuning)
+    blipKick: 1.0,            // how much a throttle blip loosens the stern (game tuning)
     keelArea: 0.011,        // m^2 side-force element (est, tuned)
     pumpArea: 0.003,
     sideForceDrop: 0.05,     // m: hull side force acts this far below the CG (est)
@@ -38,7 +46,7 @@ export const CRAFTS = {
     rpmPeakPower: 8000,
     rpmLimit: 8250,           // rev limiter (Jet Drift)
     rpmIdle: 1700,
-    engineInertia: 0.22,      // kg m^2 crank + supercharger + impeller (est)
+    engineInertia: 0.11,      // kg m^2 crank + supercharger + impeller (est)
     // pump: 161 mm, 4 blade stainless impeller (parts retailers)
     nozzleDia: 0.098,         // m nozzle exit (est)
     staticThrust: 6900,       // N at full rpm, standstill (est from momentum theory)
@@ -62,7 +70,15 @@ export const CRAFTS = {
     beam: 1.22,
     chineBeam: 1.04,
     deadrise: 18,
-    hullLatGrip: 0.9,
+    hullLatGrip: 0.8,
+    slideGrip: 0.5,
+    steerAngle: 23,
+    sternGrip: 0.6,
+    critTrim: 5.5,           // deg running trim where porpoising starts (est)
+    porpoiseGain: 300,       // how hard it porpoises past that (tuned)
+    porpoiseCap: 300,        // Nm limit on the porpoising drive (tuned)
+    popPower: 1.35,           // freestyle pop strength (game tuning)
+    blipKick: 1.1,             // how much a throttle blip loosens the stern (game tuning)
     keelArea: 0.009,
     pumpArea: 0.0025,
     sideForceDrop: 0.07,
@@ -74,10 +90,10 @@ export const CRAFTS = {
     rpmPeakPower: 7300,
     rpmLimit: 7400,
     rpmIdle: 1700,
-    engineInertia: 0.2,
+    engineInertia: 0.07,
     nozzleDia: 0.09,
     staticThrust: 4100,
-    jetSpeedTop: 40,
+    jetSpeedTop: 36.5,
     cavitation: 0.25,
     speedLimit: 99,           // too slow to need the limiter
     trimRanges: ['stock', 'extended', 'max'],
@@ -97,7 +113,15 @@ export const CRAFTS = {
     beam: 1.18,
     chineBeam: 0.98,
     deadrise: 16,
-    hullLatGrip: 0.85,
+    hullLatGrip: 0.6,
+    slideGrip: 0.4,
+    steerAngle: 25,
+    sternGrip: 0.3,
+    critTrim: 5,           // deg running trim where porpoising starts (est)
+    porpoiseGain: 600,       // how hard it porpoises past that (tuned)
+    porpoiseCap: 330,        // Nm limit on the porpoising drive (tuned)
+    popPower: 1.75,          // freestyle pop strength (game tuning)
+    blipKick: 0.7,            // how much a throttle blip loosens the stern (game tuning)
     keelArea: 0.0065,
     pumpArea: 0.002,
     sideForceDrop: 0.07,
@@ -109,10 +133,10 @@ export const CRAFTS = {
     rpmPeakPower: 8000,
     rpmLimit: 8100,
     rpmIdle: 1600,
-    engineInertia: 0.12,
+    engineInertia: 0.045,
     nozzleDia: 0.078,
     staticThrust: 3000,
-    jetSpeedTop: 37,
+    jetSpeedTop: 33.5,
     cavitation: 0.25,
     speedLimit: 99,
     trimRanges: ['trixx', 'stock', 'max'],

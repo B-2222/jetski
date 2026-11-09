@@ -6,7 +6,8 @@
 
 export const G = 9.81;
 export const MAX_WAVES = 8;
-export const WAKE_N = 64;          // must match the shader uniform array size
+export const WAKE_N = 96;          // must match the shader uniform array size
+export const SKI_RINGS = 64;       // rings 0..63 belong to the ski, the rest to the wake boat
 export const WAKE_LIFE = 9.0;      // seconds a wake ring lives
 export const WAKE_SPEED = 2.6;     // m/s ring expansion speed
 
@@ -55,6 +56,7 @@ export class Ocean {
     this.wake = new Float32Array(WAKE_N * 4);
     for (let i = 0; i < WAKE_N; i++) this.wake[i * 4 + 2] = -1e6;
     this.wakeIdx = 0;
+    this.boatIdx = 0;
     this.setConditions(conditionKey);
   }
 
@@ -82,10 +84,12 @@ export class Ocean {
 
   step(dt) { this.t += dt; }
 
-  addWake(x, z, amp) {
-    const o = this.wakeIdx * 4;
+  addWake(x, z, amp, boat = false) {
+    let i;
+    if (boat) { i = SKI_RINGS + this.boatIdx; this.boatIdx = (this.boatIdx + 1) % (WAKE_N - SKI_RINGS); }
+    else { i = this.wakeIdx; this.wakeIdx = (this.wakeIdx + 1) % SKI_RINGS; }
+    const o = i * 4;
     this.wake[o] = x; this.wake[o + 1] = z; this.wake[o + 2] = this.t; this.wake[o + 3] = amp;
-    this.wakeIdx = (this.wakeIdx + 1) % WAKE_N;
   }
 
   // Waves only, no wake: cheapest, for thousands of spray particles.

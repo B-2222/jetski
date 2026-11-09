@@ -200,7 +200,7 @@ export class Ski {
     this.fins = [
       { name: 'pump', pos: new V3(0, ys - 0.03, this.zStern + 0.18), area: c.pumpArea, depth: 0.08 },
       // hull side force: concentrated aft, where a planing hull is actually in the water
-      { name: 'hullStern', pos: new V3(0, 0, this.zStern + 0.12 * L), area: c.keelArea * 0.7, depth: 0.1, probe: this.keelY(0.12) },
+      { name: 'hullStern', pos: new V3(0, 0, this.zStern + 0.12 * L), area: c.keelArea * (c.sternGrip ?? 0.7), depth: 0.1, probe: this.keelY(0.12) },
       { name: 'hullAft', pos: new V3(0, 0, this.zStern + 0.3 * L), area: c.keelArea, depth: 0.1, probe: this.keelY(0.3) },
       { name: 'hullMid', pos: new V3(0, 0, this.zStern + 0.5 * L), area: c.keelArea * 1.1, depth: 0.1, probe: this.keelY(0.5) },
       { name: 'hullFwd', pos: new V3(0, 0, this.zStern + 0.7 * L), area: c.keelArea * 0.7, depth: 0.1, probe: this.keelY(0.7) },
@@ -244,6 +244,8 @@ export class Ski {
     this.speedLimiterOn = true;
     this.waterFrac = 1; this.cav = 1;
     this.otas = 0;
+    this.popT = 9; this.popCool = 0;
+    this.offTime = 0; this.blipT = 9;
     this.thrust = 0;
     this.input = { throttle: 0, lever: 0, steer: 0, leanX: 0, leanZ: 0, stand: 0, trimUp: 0, trimDown: 0 };
     this.stats = {};
@@ -380,13 +382,30 @@ export class Ski {
     this.demand = demand;
     this.rpmCap = c.rpmLimit * (this.gear === 'F' ? mode.rpmCap : 1);
 
+    // throttle blip: chop it, then stab it with the bars turned. The bow has dropped, the stern is
+    // light and aerated, and the turned jet bites hard: the stern kicks out. Starts slides on heavy skis.
+    if (thr < 0.25) this.offTime += dt;
+    else if (thr > 0.75) {
+      if (this.offTime > 0.06 && this.offTime < 1.4 && fwdSpeed > 6 && Math.abs(inp.steer) > 0.4) this.blipT = 0;
+      this.offTime = 0;
+    }
+    this.blipT += dt;
+
+    // freestyle pop
+    this.popCool = Math.max(0, this.popCool - dt);
+    if (inp.pop) {
+      inp.pop = 0;
+      if (this.riderOn && this.popCool <= 0 && (this.stats.wetPts || 0) > 0) { this.popT = 0; this.popCool = 0.75; }
+    }
+
     // rider body
     if (this.riderOn) {
       const stand = clamp(inp.stand, 0, 1);
       const sc = this.L / 3.3;
       const tx = -clamp(inp.leanX, -1, 1) * (0.27 + 0.08 * stand);   // right lean = -x
       const tz = this.riderSeat.z + clamp(inp.leanZ, -1, 1) * 0.36 * sc + stand * 0.2 * sc;
-      const ty = this.riderSeat.y + stand * 0.33 - Math.abs(inp.leanX) * 0.06;
+      let ty = this.riderSeat.y + stand * 0.33 - Math.abs(inp.leanX) * 0.06;
+      if (this.popT < 0.34) ty += this.popT < 0.1 ? -0.12 : 0.28;
       // critically damped spring toward the target pose
       const k = 90, d = 19;
       this.riderVel.x += ((tx - this.rider.x) * k - this.riderVel.x * d) * dt;
@@ -447,6 +466,8 @@ export class Ski {
     const horizSpeed = Math.hypot(vcg.x, vcg.z);
 
     this.sprayCount = 0;
+    const blipOn = this.blipT < 0.7;
+    const sternLoose = blipOn ? 1 - Math.min(0.85, c.blipKick * 0.72) * (1 - this.blipT / 0.7) : 1;
     // ---- hull bottom: buoyancy + planing pressure + friction ----
     let wetArea = 0, wetPts = 0, submergedVol = 0, chineL = 0, chineR = 0, bowWet = 0;
     let wetZmin = 99, wetZmax = -99;
@@ -484,9 +505,14 @@ export class Ski {
         if (un > 0) fp += 0.5 * RHO * Cp * p.areaSurf * spd * un * wet;
         fp += cLin * p.areaSurf * un * wet;
         tmpF.copy(tmpN).scale(-fp);
-        // the V bottom resists sideways slip less than a flat plate would
+        // The V bottom resists sideways slip less than a flat plate would. Once the hull is
+        // going sideways the flow separates off the chines and it skates: grip drops off.
+        const vLat = tmpV.dot(latDir), vFwd = tmpV.dot(fwd);
+        const beta = Math.atan2(Math.abs(vLat), Math.abs(vFwd) + 0.5);
+        let kLat = latK * (1 - (1 - c.slideGrip) * smooth(10 * DEG, 38 * DEG, beta));
+        if (p.u < 0.4) kLat *= sternLoose;
         const lat = tmpF.dot(latDir);
-        tmpF.addScaled(latDir, -lat * (1 - latK));
+        tmpF.addScaled(latDir, -lat * (1 - kLat));
         // skin friction
         tmpB.copy(tmpN).scale(un);
         const vt = tmpV.sub(tmpB);
@@ -518,12 +544,12 @@ export class Ski {
       pointVel(tmpW, tmpV);
       const un = tmpV.dot(tmpN);
       if (un > 0) {
-        const fp = 0.5 * RHO * 1.0 * p.area * tmpV.len() * un * wet;
+        const fp = 0.5 * RHO * (p.n.y > 0.5 ? 0.45 : 1.0) * p.area * tmpV.len() * un * wet;
         tmpF.copy(tmpN).scale(-fp);
         cat = 'upper'; apply(tmpF, tmpW);
       }
       // general drag of a submerged deck
-      tmpF.copy(tmpV).scale(-0.5 * RHO * 0.25 * p.area * tmpV.len() * wet);
+      tmpF.copy(tmpV).scale(-0.5 * RHO * 0.12 * p.area * tmpV.len() * wet);
       apply(tmpF, tmpW);
       if (p.n.y > 0.5) deckWet += wet;
     }
@@ -553,8 +579,9 @@ export class Ski {
       const aStall = 15 * DEG, CLa = 3.4;
       let cl;
       if (a < aStall) cl = CLa * a;
-      else cl = Math.max(CLa * aStall * (0.42 + 0.58 * Math.exp(-(a - aStall) / (8 * DEG))), 0.3 * Math.sin(2 * a));
-      const q2 = 0.5 * RHO * sp2 * f.area * sub;
+      else cl = Math.max(CLa * aStall * (0.28 + 0.72 * Math.exp(-(a - aStall) / (6 * DEG))), 0.22 * Math.sin(2 * a));
+      const aft = f.name === 'pump' || f.name === 'hullStern' || f.name === 'hullAft' || f.side;
+      const q2 = 0.5 * RHO * sp2 * f.area * sub * (aft ? sternLoose : 1);
       const latF = -Math.sign(vx) * q2 * cl;
       const cd = 0.04 + cl * cl / 1.6 + (a > aStall ? 1.2 * Math.sin(a) ** 2 : 0);
       const sp = Math.sqrt(sp2);
@@ -591,7 +618,7 @@ export class Ski {
     this.toWorld(this.intakePos, tmpW);
     const intakeDepth = oc.height(tmpW.x, tmpW.z, SELF_WAKE_AGE) - tmpW.y;
     const wfTarget = smooth(-0.05, 0.015, intakeDepth);
-    this.waterFrac = approach(this.waterFrac, wfTarget, wfTarget > this.waterFrac ? 7 : 30, dt);
+    this.waterFrac = approach(this.waterFrac, wfTarget, wfTarget > this.waterFrac ? 22 : 30, dt);
     const wf = this.waterFrac;
 
     const omega = this.rpm * Math.PI / 30;
@@ -629,7 +656,7 @@ export class Ski {
     this.jetSpeed = vj;
 
     // nozzle direction in body frame: steering yaw, VTS pitch, iBR bucket
-    const delta = this.steer * 21 * DEG;
+    const delta = this.steer * (c.steerAngle || 21) * DEG;
     const tr = this.trim * DEG;
     let dx = Math.sin(delta) * Math.cos(tr);
     let dy = -Math.sin(tr);
@@ -638,7 +665,8 @@ export class Ski {
     // with the bucket down the jet is turned forward and down under the hull
     dz = dz * (1 - b) + b * (-0.78 * REV_EFF);
     dy = dy * (1 - b) + b * (0.22 * REV_EFF);
-    dx = dx * (1 - b * 0.25);
+    dx = dx * (1 + b * 0.5);   // bucket vanes throw the turned jet sideways: brake + bars kicks the stern out
+    if (this.blipT < 0.4) dx *= 1 + 1.2 * c.blipKick * (1 - this.blipT / 0.4);
     const dirBody = new V3(dx, dy, dz);
     this.nozzleDirBody = dirBody;
     q.rotate(dirBody, tmpN);
@@ -669,15 +697,47 @@ export class Ski {
       const wetFrac = clamp(wetArea / 1.2, 0, 1);
       const rollRate = w.dot(fwd), yawRate = w.dot(up);
       const kRoll = (90 + 38 * horizSpeed) * wetFrac;
-      const kYaw = (120 + 30 * horizSpeed) * wetFrac;
+      const kYaw = (60 + 13 * horizSpeed) * wetFrac;
       const pitchRate = w.dot(left);
-      const kPitch = (200 + 75 * horizSpeed) * wetFrac;
+      const kPitch = (130 + 32 * horizSpeed) * wetFrac;
       T.addScaled(fwd, -rollRate * kRoll);
       T.addScaled(up, -yawRate * kYaw);
       T.addScaled(left, -pitchRate * kPitch);
-      // heave damping: the planing surface resists bouncing
-      tmpF.set(0, -vcg.y * (300 + 55 * horizSpeed) * wetFrac, 0);
+      // Porpoising inception: above a critical running trim a planing hull's pitch/heave
+      // motion feeds on itself (Savitsky, Day & Haag) until it settles into a bounce.
+      // Trim up + power = the ski starts leaping. Leaning forward pulls the trim back down.
+      const runTrim = Math.asin(clamp(fwd.y, -1, 1)) / DEG;   // bow-up pitch in degrees
+      if (horizSpeed > 10) {
+        const over = Math.min(6, Math.max(0, runTrim - c.critTrim + this.trim * 0.25));
+        const drive = clamp(over * c.porpoiseGain * pitchRate, -c.porpoiseCap, c.porpoiseCap) * wetFrac * smooth(10, 18, horizSpeed);
+        this.porpoise = over;
+        T.addScaled(left, drive);
+      } else this.porpoise = 0;
+      // heave damping relative to the moving water surface
+      oc.sample(cgW.x, cgW.z, s, SELF_WAKE_AGE);
+      tmpF.set(0, -(vcg.y - s.dhdt) * (160 + 22 * horizSpeed) * wetFrac, 0);
       F.add(tmpF);
+    }
+
+    // ---- freestyle pop (bunny hop): the rider yanks the bars and stomps the stern down,
+    // the hull loads up against the water, then the rider springs and pulls the ski with them.
+    if (this.popT < 0.34) {
+      const g = clamp(wetArea / 0.4, 0, 1);
+      const pt = this.popT;
+      // more throttle and more trim up = a bigger pop (the jet helps lift the stern-loaded hull)
+      const k = (this.mass / 490) * (0.65 + 0.35 * this.throttle) * (1 + Math.max(0, this.trim) / 18) * (c.popPower || 1);
+      if (pt < 0.1) {
+        tmpW.copy(up).scale(-5200 * k);
+        this.toWorld(new V3(0, 0, this.zStern + 0.5), tmpN);
+        cat = 'pop'; apply(tmpW, tmpN);
+        T.addScaled(left, -2600 * k * g);           // bars yanked up: nose up
+      } else {
+        const f = 1 - (pt - 0.1) / 0.24;
+        tmpW.copy(up).scale(9500 * k * f * g);
+        F.add(tmpW);
+        T.addScaled(left, 900 * k * f);             // level it out in the air
+      }
+      this.popT += dt;
     }
 
     // ---- light aerodynamic damping of rotation (matters in the air) ----
@@ -774,7 +834,7 @@ export class Ski {
   checkEjection() {
     if (!this.riderOn) return null;
     const st = this.stats, ae = this.accEj || new V3();
-    if (ae.z / G < -2.3) return 'Stuffed the nose';
+    if (ae.z / G < -2.8) return 'Stuffed the nose';
     if (st.gVert > 7.5 && ae.y / G > 4) return 'Landed too hard';
     if (Math.abs(ae.x / G) > 2.4) return 'Hooked and got thrown';
     if (Math.abs(st.roll) > 95) return 'Rolled it';

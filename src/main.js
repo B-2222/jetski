@@ -1,4 +1,4 @@
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+import * as THREE from 'three';
 import { Ocean, CONDITIONS } from './waves.js';
 import { CRAFTS, TRIM_RANGES, RIDING_MODES } from './craft.js';
 import { Ski, clamp } from './physics.js';
@@ -6,6 +6,12 @@ import { SkiModel } from './model.js';
 import { OceanView, createSky } from './ocean.js';
 import { Spray } from './effects.js';
 import { SkiAudio } from './audio.js';
+import { World } from './world.js';
+import { Tricks } from './tricks.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const $ = (id) => document.getElementById(id);
 const MPH = 2.23694, KMH = 3.6;
@@ -19,8 +25,10 @@ const canvas = $('view');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.85;
+renderer.toneMappingExposure = 0.88;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 6000);
 const sunDir = new THREE.Vector3(-0.45, 0.55, 0.7).normalize();
@@ -28,9 +36,13 @@ scene.fog = new THREE.FogExp2(0xb8d6e8, 0.0009);
 
 const sky = createSky(scene, sunDir);
 scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x1c4a5a, 0.85));
-const sun = new THREE.DirectionalLight(0xfff1dc, 2.2);
+const sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
 sun.position.copy(sunDir).multiplyScalar(100);
-scene.add(sun);
+sun.castShadow = true;
+sun.shadow.camera.left = -6; sun.shadow.camera.right = 6; sun.shadow.camera.top = 6; sun.shadow.camera.bottom = -6;
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 80;
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
+scene.add(sun, sun.target);
 // environment reflections from the sky
 {
   const pmrem = new THREE.PMREMGenerator(renderer);
@@ -52,7 +64,9 @@ const settings = {
   trim: null,
   sound: store.get('sound', 'on'),
   steerAssist: store.get('assist', 'on') === 'on',
+  quality: store.get('quality', 'high'),
 };
+if (!['low', 'high', 'ultra'].includes(settings.quality)) settings.quality = 'high';
 if (!CRAFTS[settings.craft]) settings.craft = 'rxpx325';
 if (!CONDITIONS[settings.cond]) settings.cond = 'chop';
 
@@ -60,63 +74,41 @@ const ocean = new Ocean(settings.cond);
 let ski = new Ski(CRAFTS[settings.craft], ocean);
 let model = new SkiModel(ski);
 scene.add(model.group);
-const oceanView = new OceanView(scene, ocean, sunDir);
+const oceanView = new OceanView(scene, ocean, sunDir, settings.quality);
 const spray = new Spray(scene, ocean);
+spray.uniforms.uSunDir.value.copy(sunDir);
+spray.jet.mesh.material.uniforms.uSunDir.value.copy(sunDir);
 const audio = new SkiAudio();
 
-// buoys: a slalom course ahead plus scattered markers
-const buoys = [];
-{
-  const orange = new THREE.MeshStandardMaterial({ color: 0xff5a14, roughness: 0.5 });
-  const yellow = new THREE.MeshStandardMaterial({ color: 0xffd21a, roughness: 0.5 });
-  const white = new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.5 });
-  const mk = (x, z, mat, big) => {
-    const g = new THREE.Group();
-    const r = big ? 0.5 : 0.35;
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.8, r, r * 2.2, 16), mat);
-    body.position.y = r * 0.6;
-    g.add(body);
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.83, r * 0.86, r * 0.35, 16), white);
-    band.position.y = r * 0.9;
-    g.add(band);
-    const top = new THREE.Mesh(new THREE.SphereGeometry(r * 0.8, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat);
-    top.position.y = r * 1.7;
-    g.add(top);
-    scene.add(g);
-    buoys.push({ g, x, z, vx: 0, vz: 0, r });
-  };
-  for (let i = 0; i < 14; i++) mk((i % 2 ? 1 : -1) * 11, 70 + i * 42, i % 2 ? orange : yellow, false);
-  let seed = 7;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  for (let i = 0; i < 40; i++) {
-    const a = rnd() * Math.PI * 2, d = 120 + rnd() * 700;
-    mk(Math.cos(a) * d, Math.sin(a) * d, rnd() > 0.5 ? orange : yellow, true);
+const world = new World(scene, ocean);
+const tricks = new Tricks((name, pts, mult) => {
+  toast(`${name}  +${pts}${mult > 1 ? '  x' + mult : ''}`, mult > 1 ? 'cyan' : '');
+});
+
+// ---------------- post-processing / quality ----------------
+let composer = null, bloom = null;
+function applyQuality(q) {
+  settings.quality = q; store.set('quality', q);
+  const dpr = window.devicePixelRatio || 1;
+  renderer.setPixelRatio(q === 'ultra' ? Math.min(dpr, 2) : q === 'high' ? Math.min(dpr, 1.5) : 1);
+  renderer.shadowMap.enabled = q !== 'low';
+  sun.castShadow = q !== 'low';
+  const sm = q === 'ultra' ? 4096 : 2048;
+  if (sun.shadow.map && sun.shadow.mapSize.x !== sm) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+  sun.shadow.mapSize.set(sm, sm);
+  oceanView.setQuality(q);
+  spray.setQuality(q);
+  if (composer) { composer.dispose(); composer = null; }
+  if (q !== 'low') {
+    const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+    const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: renderer.capabilities.isWebGL2 ? 4 : 0 });
+    composer = new EffectComposer(renderer, rt);
+    composer.addPass(new RenderPass(scene, camera));
+    bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), q === 'ultra' ? 0.42 : 0.34, 0.55, 0.9);
+    composer.addPass(bloom);
+    composer.addPass(new OutputPass());
   }
-}
-// distant islands for a horizon reference
-{
-  let seed = 99;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const green = new THREE.MeshStandardMaterial({ color: 0x3f6b3c, roughness: 0.95, flatShading: true });
-  const sand = new THREE.MeshStandardMaterial({ color: 0xd8c79a, roughness: 1, flatShading: true });
-  for (let i = 0; i < 9; i++) {
-    const a = rnd() * Math.PI * 2, d = 900 + rnd() * 1300;
-    const r = 60 + rnd() * 180, h = 25 + rnd() * 90;
-    const geo = new THREE.IcosahedronGeometry(1, 3);
-    const p = geo.attributes.position;
-    for (let k = 0; k < p.count; k++) {
-      const x = p.getX(k), y = p.getY(k), z = p.getZ(k);
-      const n = 0.75 + 0.35 * Math.sin(x * 3.1 + i) * Math.cos(z * 2.7 + i * 2) + 0.15 * Math.sin(y * 7 + i);
-      p.setXYZ(k, x * r * n, Math.max(-0.1, y) * h * n, z * r * n);
-    }
-    geo.computeVertexNormals();
-    const isl = new THREE.Mesh(geo, green);
-    isl.position.set(Math.cos(a) * d, -2, Math.sin(a) * d);
-    scene.add(isl);
-    const beach = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.05, r * 1.12, 3, 24), sand);
-    beach.position.set(isl.position.x, -0.8, isl.position.z);
-    scene.add(beach);
-  }
+  resize();
 }
 
 // physics overlay (G): thrust vector, CG, wetted points, velocity
@@ -171,6 +163,7 @@ window.addEventListener('keydown', (e) => {
     case 'm': { const ks = Object.keys(RIDING_MODES); ski.mode = ks[(ks.indexOf(ski.mode) + 1) % ks.length]; toast(RIDING_MODES[ski.mode].label + ' mode'); refreshStatic(); break; }
     case 'l': if (ski.craft.hasLaunchControl) { ski.launchArmed = !ski.launchArmed; toast(ski.launchArmed ? 'Launch control armed' : 'Launch control off'); refreshStatic(); } else toast('No launch control on this ski', 'warn'); break;
     case 'c': camMode = (camMode + 1) % CAMS.length; toast(CAMS[camMode] + ' camera', 'cyan'); break;
+    case 'f': ski.input.pop = 1; break;
     case 'k': ski.speedLimiterOn = !ski.speedLimiterOn; settings.limiter = ski.speedLimiterOn ? 'on' : 'off'; store.set('limiter', settings.limiter); toast(ski.speedLimiterOn ? 'Speed limiter on' : 'Speed limiter off (derestricted)', ski.speedLimiterOn ? '' : 'warn'); refreshStatic(); break;
     case 'r': if (e.shiftKey) { resetSki(); } else reboard(); break;
     case 'g': overlay.visible = !overlay.visible; toast(overlay.visible ? 'Physics overlay on' : 'Physics overlay off', 'cyan'); break;
@@ -256,7 +249,8 @@ function readInput(dt) {
     if (bt(5) > 0.5) trimUp = true;
     if (bt(4) > 0.5) trimDown = true;
     padEdge(gp, 3, () => { ski.cycleTrimRange(); buildTrimScale(); refreshStatic(); toast(ski.trimRange.label, 'cyan'); });
-    padEdge(gp, 2, () => { camMode = (camMode + 1) % CAMS.length; toast(CAMS[camMode] + ' camera', 'cyan'); });
+    padEdge(gp, 2, () => { ski.input.pop = 1; });
+    padEdge(gp, 8, () => { camMode = (camMode + 1) % CAMS.length; toast(CAMS[camMode] + ' camera', 'cyan'); });
     padEdge(gp, 1, () => reboard());
     padEdge(gp, 9, () => setPaused(!paused));
     break;
@@ -266,7 +260,7 @@ function readInput(dt) {
   let target = clamp(steerT, -1, 1);
   if (settings.steerAssist && !padSteer) {
     const mph = (ski.stats.speed || 0) * MPH;
-    target *= 1 - 0.45 * clamp((mph - 25) / 45, 0, 1);
+    target *= 1 - 0.35 * clamp((mph - 35) / 35, 0, 1);
   }
   input.steer += (target - input.steer) * Math.min(1, dt * (Math.abs(target) > Math.abs(input.steer) ? 7 : 10));
   input.throttle = thr; input.lever = lever;
@@ -302,6 +296,7 @@ function reboard() {
   toast('Back on. Engine restarted in neutral', 'cyan');
 }
 function onEject(reason) {
+  tricks.crash();
   model.detachRider(scene);
   const rp = model.riderGroup.position;
   Object.assign(thrownRider, { active: true, x: rp.x, y: rp.y, z: rp.z, vx: ski.vel.x * 0.9, vy: ski.vel.y + 2.5, vz: ski.vel.z * 0.9, inWater: false });
@@ -348,6 +343,7 @@ function startRide() {
   settings.units = $('optUnits').value; unitsMph = settings.units === 'mph'; store.set('units', settings.units);
   settings.trim = $('optTrim').value;
   settings.steerAssist = $('optAssist').value === 'on'; store.set('assist', $('optAssist').value);
+  if ($('optQuality').value !== settings.quality) applyQuality($('optQuality').value);
   if (ski.craft.trimRanges.includes(settings.trim)) ski.trimRangeKey = settings.trim;
   buildTrimScale(); refreshStatic();
   if (settings.sound === 'on') audio.start();
@@ -386,6 +382,7 @@ function buildMenu() {
   $('optLimiter').value = settings.limiter;
   $('optUnits').value = settings.units;
   $('optAssist').value = settings.steerAssist ? 'on' : 'off';
+  $('optQuality').value = settings.quality;
   $('soundBtn').textContent = settings.sound === 'on' ? 'Sound on' : 'Sound off';
 }
 const KEYS = [
@@ -393,7 +390,7 @@ const KEYS = [
   ['← →', 'Lean body left / right'], ['↑ ↓', 'Weight forward / back'], ['Space', 'Stand up (hold)'],
   ['E / Q', 'VTS trim up / down'], ['E E / Q Q', 'Full up / neutral'], ['T', 'Trim range (MAX mod)'],
   ['M', 'Riding mode'], ['L', 'Launch control'], ['K', 'Speed limiter'],
-  ['C', 'Camera'], ['G', 'Physics overlay'], ['R', 'Climb back on'],
+  ['F', 'Pop (bunny hop)'], ['C', 'Camera'], ['G', 'Physics overlay'], ['R', 'Climb back on'],
   ['Shift R', 'Reset to start'], ['V', 'Water conditions'], ['1 2 3', 'Change ski'],
   ['U', 'mph / km/h'], ['N', 'Sound'], ['P', 'Menu'],
 ];
@@ -444,7 +441,6 @@ function toast(text, kind = '') {
 const feats = { top: 0, slide: 0, air: 0, tail: 0 };
 let slideTimer = 0, slideMax = 0, hudTimer = 0;
 spray.onLanding = (air, vy) => {
-  if (air > 0.6) toast(`Air ${air.toFixed(1)} s`, 'cyan');
   if (air > feats.air) feats.air = air;
   audio.thump(vy);
 };
@@ -495,6 +491,8 @@ function updateHUD(dt) {
     $('jetNum').textContent = Math.round(ski.jetSpeed || 0) + ' m/s';
     $('thrustNum').textContent = Math.round(Math.max(0, ski.thrust)) + ' N';
     const unit = unitsMph ? MPH : KMH;
+    $('fScore').textContent = tricks.score.toLocaleString();
+    $('fCombo').textContent = tricks.combo > 1 ? 'x' + Math.min(5, tricks.combo) : '';
     $('fTop').textContent = Math.round(feats.top * unit) + (unitsMph ? ' mph' : ' km/h');
     $('fSlide').innerHTML = Math.round(feats.slide) + '&deg;';
     $('fAir').textContent = feats.air.toFixed(1) + ' s';
@@ -503,12 +501,7 @@ function updateHUD(dt) {
   // records + slide callouts
   if ((st.fwdSpeed || 0) > feats.top) feats.top = st.fwdSpeed;
   if (spray.roosterHeight > feats.tail) feats.tail = spray.roosterHeight;
-  if (moving && st.wetPts > 0 && Math.abs(slip) > 20 && ski.riderOn) {
-    slideTimer += dt; slideMax = Math.max(slideMax, Math.abs(slip));
-  } else {
-    if (slideTimer > 0.5) { toast(`Powerslide ${Math.round(slideMax)}°`); if (slideMax > feats.slide) feats.slide = slideMax; }
-    slideTimer = 0; slideMax = 0;
-  }
+  if (moving && st.wetPts > 0 && ski.riderOn) feats.slide = Math.max(feats.slide, Math.abs(slip) > 20 ? Math.abs(slip) : 0);
 }
 
 // ---------------- camera ----------------
@@ -583,26 +576,6 @@ function setFov(target, dt) {
   camera.updateProjectionMatrix();
 }
 
-function updateBuoys(dt) {
-  for (const b of buoys) {
-    // ski pushes buoys out of the way
-    const dx = b.x - ski.pos.x, dz = b.z - ski.pos.z;
-    const d2 = dx * dx + dz * dz;
-    if (d2 < 1.6) {
-      const d = Math.sqrt(d2) || 1;
-      const push = (1.26 - d) * 6;
-      b.vx += dx / d * push + ski.vel.x * 0.3; b.vz += dz / d * push + ski.vel.z * 0.3;
-      if (d < 1) spray.burst(b.x, ocean.baseHeight(b.x, b.z), b.z, 20, 2, 2, 0.15);
-    }
-    b.vx *= Math.exp(-dt * 1.2); b.vz *= Math.exp(-dt * 1.2);
-    b.x += b.vx * dt; b.z += b.vz * dt;
-    const h = ocean.height(b.x, b.z);
-    const hx = ocean.height(b.x + 0.5, b.z) - h, hz = ocean.height(b.x, b.z + 0.5) - h;
-    b.g.position.set(b.x, h - b.r * 0.3, b.z);
-    b.g.rotation.set(hz * 1.2, 0, -hx * 1.2);
-  }
-}
-
 function updateOverlay() {
   if (!overlay.visible) return;
   const pos = [], col = [];
@@ -637,7 +610,8 @@ function resize() {
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  spray.uniforms.uScale.value = h * 0.5 / Math.tan(camera.fov * Math.PI / 360);
+  spray.uniforms.uScale.value = h * 0.5 / Math.tan(camera.fov * Math.PI / 360) * renderer.getPixelRatio();
+  if (composer) { composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h); }
 }
 window.addEventListener('resize', resize);
 resize();
@@ -649,7 +623,9 @@ function stepGame(dt) {
     readInput(dt);
     const why = ski.update(dt);
     if (why) onEject(why);
+    world.update(dt, ski, spray);
     spray.emitFromSki(ski, dt);
+    tricks.update(dt, ski, spray);
     updateThrownRider(dt);
     updateHUD(dt);
     updateCamera(dt);
@@ -658,6 +634,7 @@ function stepGame(dt) {
     // menu backdrop: the ski idling on the water with a slow orbit
     ski.input.throttle = 0; ski.input.lever = 0;
     ski.update(dt);
+    world.update(dt, ski, spray);
     idleSpin += dt * 0.12;
     const p = ski.pos;
     camera.position.set(p.x + Math.sin(idleSpin) * 7, ocean.height(p.x, p.z) + 1.6, p.z + Math.cos(idleSpin) * 7);
@@ -665,17 +642,18 @@ function stepGame(dt) {
     camera.lookAt(p.x, p.y + 0.4, p.z);
     camPos.copy(camera.position);
   }
-  model.update();
-  updateBuoys(dt);
-  spray.update(dt, camera.position);
+  model.update(dt, unitsMph);
+  spray.update(dt);
 }
 function render() {
   oceanView.update(camera, ski);
   sky.position.copy(camera.position);
   sky.material.uniforms.uTime.value = ocean.t;
-  spray.uniforms.uScale.value = window.innerHeight * 0.5 / Math.tan(camera.fov * Math.PI / 360);
+  spray.uniforms.uScale.value = window.innerHeight * 0.5 / Math.tan(camera.fov * Math.PI / 360) * renderer.getPixelRatio();
   updateOverlay();
-  renderer.render(scene, camera);
+  sun.position.set(ski.pos.x + sunDir.x * 40, ski.pos.y + sunDir.y * 40, ski.pos.z + sunDir.z * 40);
+  sun.target.position.set(ski.pos.x, ski.pos.y, ski.pos.z);
+  if (composer) composer.render(); else renderer.render(scene, camera);
 }
 let autoRun = true;
 function frame(now) {
@@ -702,8 +680,9 @@ function advance(seconds, script) {
 }
 
 // expose for testing / tinkering in the console
-window.rooster = { get ski() { return ski; }, ocean, spray, settings, setPaused, startRide, toast, camera, advance, resume: () => { autoRun = true; last = performance.now(); }, setCam: (i) => { camMode = i; }, cycleCraft, resetSki, setOverlay: (v) => { overlay.visible = v; }, keys };
+window.rooster = { get ski() { return ski; }, ocean, spray, settings, setPaused, startRide, toast, camera, advance, resume: () => { autoRun = true; last = performance.now(); }, setCam: (i) => { camMode = i; }, cycleCraft, resetSki, tricks, world, applyQuality, setOverlay: (v) => { overlay.visible = v; }, keys };
 
+applyQuality(settings.quality);
 buildMenu();
 buildTrimScale();
 refreshStatic();

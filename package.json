@@ -1,1 +1,14 @@
-{"type":"module","name":"jetski","private":true}
+{
+  "name": "rooster-tail",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "python3 -m http.server 8000",
+    "build": "node tools/build-artifact.mjs",
+    "test:physics": "node tools/sim-test.mjs && node tools/slide-test.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.20.2",
+    "three": "0.160.0"
+  }
+}

@@ -57,6 +57,8 @@ canvas#view { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 
 .feats { padding: 8px 12px; display: grid; grid-template-columns: auto auto; gap: 2px 14px; align-items: baseline; }
 .feats .v { font-family: var(--display); font-weight: 700; font-size: 20px; text-align: right; font-variant-numeric: tabular-nums; }
+.feats .score { font-size: 34px; line-height: 1; color: var(--hivis); }
+.feats .combo { font-size: 22px; color: var(--jet); }
 
 /* bottom cluster */
 .cluster { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: auto auto auto; gap: 14px; padding: 10px 16px; align-items: end; }
@@ -187,7 +189,8 @@ select { font: inherit; font-size: 15px; color: var(--text); background: #0f1e25
         <span class="chip off" id="hLaunch" hidden>Launch armed</span>
       </div>
     </div>
-    <div class="feats panel" aria-label="Session records">
+    <div class="feats panel" aria-label="Freestyle score and session records">
+      <span class="label">Score</span><span class="v score"><span id="fScore">0</span> <span class="combo" id="fCombo"></span></span>
       <span class="label">Top speed</span><span class="v" id="fTop">0</span>
       <span class="label">Best slide</span><span class="v" id="fSlide">0&deg;</span>
       <span class="label">Longest air</span><span class="v" id="fAir">0.0 s</span>
@@ -241,7 +244,7 @@ select { font: inherit; font-size: 15px; color: var(--text); background: #0f1e25
     <div class="rooster"><span class="label">Rooster tail</span><span class="num" id="tailNum">0.0 m</span></div>
     <div class="kv" style="width:100%"><span class="label">Jet</span><span class="num" id="jetNum">0 m/s</span></div>
     <div class="kv" style="width:100%"><span class="label">Thrust</span><span class="num" id="thrustNum">0 N</span></div>
-    <div class="hint"><kbd>H</kbd> controls &middot; <kbd>C</kbd> camera &middot; <kbd>P</kbd> menu</div>
+    <div class="hint"><kbd>F</kbd> pop &middot; <kbd>H</kbd> controls &middot; <kbd>C</kbd> camera &middot; <kbd>P</kbd> menu</div>
   </div>
 
   <div class="thrown panel" id="thrown" hidden>
@@ -253,7 +256,7 @@ select { font: inherit; font-size: 15px; color: var(--text); background: #0f1e25
   <div class="help panel" id="help" hidden>
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><span class="label">Controls</span><span class="hint"><kbd>H</kbd> close</span></div>
     <div class="keys" id="helpKeys"></div>
-    <div class="foot">Steering comes from the jet. No throttle means almost no steering (the ECU gives a little for 2.5 s). Lean into turns to carve. Stab the iBR mid-turn and lean out to break the stern loose for a powerslide. Trim up for a rooster tail and top speed, down for grip.</div>
+    <div class="foot">Steering comes from the jet. No throttle means almost no steering (the ECU gives a little for 2.5 s). Lean into turns to carve. To slide a heavy ski: bars over, chop the throttle, then blip it back on, or stab the iBR and lean out. Trim up and full throttle makes the ski porpoise and leap; F pops it out of the water. Jump the wake boat's wake for big air. Tricks score points; chain them inside 3 s for a combo.</div>
   </div>
 </div>
 
@@ -278,18 +281,26 @@ select { font: inherit; font-size: 15px; color: var(--text); background: #0f1e25
         <select id="optLimiter"><option value="on" selected>On (about 69 mph)</option><option value="off">Off (derestricted)</option></select></label>
       <label class="opt"><span class="label">Keyboard steering</span>
         <select id="optAssist"><option value="on" selected>Progressive (less lock at speed)</option><option value="off">Raw full lock</option></select></label>
+      <label class="opt"><span class="label">Graphics</span>
+        <select id="optQuality"><option value="ultra">Ultra</option><option value="high" selected>High</option><option value="low">Low (faster)</option></select></label>
       <label class="opt"><span class="label">Units</span>
         <select id="optUnits"><option value="mph" selected>mph</option><option value="kmh">km/h</option></select></label>
       <button class="btn" id="startBtn" type="button">Ride</button>
       <button class="btn ghost" id="soundBtn" type="button">Sound on</button>
     </div>
     <div class="keys" id="menuKeys"></div>
-    <div class="foot">Gamepad works too: RT throttle, LT iBR, left stick steer, right stick body weight, A stand, RB/LB trim, Y trim range, X camera, B climb back on.</div>
+    <div class="foot">Gamepad works too: RT throttle, LT iBR, left stick steer, right stick body weight, A stand, X pop, RB/LB trim, Y trim range, View camera, B climb back on.</div>
   </div>
 </div>
 
 <div class="touch" id="touch" hidden></div>
 
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
