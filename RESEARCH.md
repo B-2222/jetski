@@ -303,6 +303,86 @@ For a Spark 90 target about 48 mph top speed and a much slower launch.
 
 ---
 
+## 7A. Trim (VTS) limits: factory vs upgraded
+
+### What we know
+
+| Setup | Trim up | Trim down | Total range | Trust |
+|---|---|---|---|---|
+| **Spark, standard VTS** | about **+7 degrees** | about **-4.5 degrees** | about 11.5 degrees | Reviewer (PWC review); the +7 also matches the Trixx figure minus its extra 10 degrees |
+| **Spark Trixx (extended VTS, standard on Trixx)** | **+17 degrees** | **-6 degrees** | about 23 degrees (double standard) | Sourced: Boating Mag Trixx review |
+| **Extended-range VTS accessory for Spark** (part 295100704) | same as Trixx | same as Trixx | "double the range" | Sourced: BRP shop. Full range only on 2017+ Spark with iBR; 2016 and older stay at stock range |
+| **Old Sea-Doo SP (1990s)** | **+8 degrees** at full up | not stated | | Sourced: SP shop manual |
+| **GTI / GTX / RXT / RXP-X, standard VTS** | not published | not published | one owner measured only about 1 inch (25 mm) of nozzle sweep top to bottom | Forum |
+| **X Package Module** (RXT, GTX, Wake Pro 2018+, GTI/GTR/GTS 2020+) | | | **+50% more range** than standard (one listing says 30%) | Reviewer/retailer |
+| **RXP-X / RXT-X (X models)** | | | come with **extended VTS + launch mode** from the factory | Sourced: spec listings |
+
+### What the extra trim actually does
+
+- The **Trixx's extra 10 degrees of UP trim** is what matters most. It points the jet downward so it **pushes the back down and the nose up**, so the ski pops into **wheelies and tail-stands** with very little throttle. [Sourced: Boating Mag]
+- The extra **DOWN trim** was meant to help stab the nose into the water after jumps or "sub" the nose (dive it under), but the reviewer found those moves actually **harder**. [Sourced: Boating Mag]
+- **Double-tap the trim button up** to jump straight to full up, and **double-tap down** to go back to neutral (Spark). [Forum]
+- **Launch mode** (X models): trims fully down for the start so the nose doesn't lift, then trims up automatically as speed rises. One test found riders **could not beat it by trimming by hand**. [Reviewer: Greenhulk]
+
+### Other Trixx parts that change weight distribution
+
+- **Height-adjustable handlebar riser**: lets the rider stand taller and **move their centre of gravity** up and back for tricks. [Sourced: Red Dot design award page]
+- Trixx models also have **angled footwell wedges** so the rider can brace and lever the ski. [My knowledge, not confirmed by a source in this search]
+
+### Aftermarket
+
+- I found **no aftermarket kit that adds more trim degrees** to the RXP-X or RXT-X beyond BRP's own extended VTS and X Package. [Search result]
+- Aftermarket parts change the **feel** without changing trim range: adjustable **sponsons** (RIVA Pro-Series has 5 positions), **ride plates**, **intake grates**, and **handlebar extensions/risers**. RIVA's sponsons also push the ST3 hull's nose down a bit. [Reviewer: Watercraft Journal]
+
+### Suggested game values [Engineering estimate, tune by feel]
+
+| Game setting | Up | Down |
+|---|---|---|
+| Standard VTS (GTI, GTX, RXT) | +6 degrees | -5 degrees |
+| X Package / X model extended VTS (x1.5) | +9 degrees | -7.5 degrees |
+| Spark standard | +7 degrees | -4.5 degrees |
+| Spark Trixx / extended VTS (x2) | +17 degrees | -6 degrees |
+| "Unlocked" fantasy mod (not real, for fun) | +25 degrees | -10 degrees |
+
+The trim motor in the game should take about 2 to 3 seconds to go from full down to full up, not jump instantly. [Engineering estimate]
+
+---
+
+## 7B. 3D models of Sea-Doos (and other jet skis)
+
+**About licences:** "CC Attribution" (CC-BY) means free to use, even in a game, as long as you **credit the author**. "Editorial only" means you **cannot** use it in a game. Also, real Sea-Doo models carry **BRP's logos and trademarks**. That is fine for a personal or school project, but publishing a game with real Sea-Doo branding would need BRP's permission. A safe route is to use the shape and remove or replace the logos.
+
+I could not open Sketchfab directly (this environment blocks it), so check each licence on the page yourself.
+
+### Free
+
+| Model | Where | Licence | Detail | Notes |
+|---|---|---|---|---|
+| **2012 Sea-Doo GTI SE 130** by BoatUS Foundation | [Sketchfab](https://sketchfab.com/3d-models/2012-sea-doo-gti-se-130-d7b3e903d7dc43a694720bd347f4fadf) | Free download (check licence) | Unknown | **The only free real Sea-Doo found.** Best starting point |
+| **UNDERPOLY Free Jet-Ski + Trailer** | [Sketchfab](https://sketchfab.com/3d-models/underpoly-free-jet-ski-trailer-c9e324b0a9284904b4a442080fc2a6ef) | CC Attribution | about 2,500 polygons, low poly, made for Unity | Generic, great for a fast web game |
+| **Kawasaki 310X Ultra** by XOIAL | [Sketchfab](https://sketchfab.com/3d-models/kawasaki-310xultra-jet-ski-37a2348f02da472d98310fd5621307c6) | CC Attribution, author says "use where you want" | about 8,200 triangles | Not a Sea-Doo but a good game-ready size |
+| **Jetski** by appsnation | [Sketchfab](https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b) | CC Attribution | 1.2 million triangles | Too heavy for a game unless simplified in Blender |
+| **Stand-up Jet Ski** by daftpy | [Sketchfab](https://sketchfab.com/3d-models/stand-up-jet-ski-d7b63daa9bb94c7ca00733201b0ecae7) | Check page | about 2,100 triangles | Stand-up style, not a sit-down Sea-Doo |
+| More | [Sketchfab "sea-doo" tag](https://sketchfab.com/tags/sea-doo), [Sketchfab "seadoo" tag](https://sketchfab.com/tags/seadoo), [Sketchfab "jetski" tag](https://sketchfab.com/tags/jetski) | Mixed | | Filter by "Downloadable" |
+
+### Paid Sea-Doo models
+
+| Model | Where | Price | Notes |
+|---|---|---|---|
+| **Sea-Doo GTX Limited 325 (2025)** | [CGTrader](https://cgtrader.com/3d-models/watercraft/recreational-watercraft/jetski-seadoo-gtx-325-2025-3d-model-game-and-highpoly) | about $15 | **Best paid option**: includes a game-ready low-poly version, 4K PBR textures, royalty-free |
+| Sea-Doo Spark | [TurboSquid](https://www.turbosquid.com/3d-models/jet-ski-sea-doo-spark-personal-watercraft-1038172) / [Free3D](https://free3d.com/3d-model/sea-doo-spark-2842.html) | about $79 | about 26,000 polygons |
+| Sea-Doo RXT-X 300 (2019) | [TurboSquid](https://www.turbosquid.com/3d-models/sea-doo-rxt-x-300-performance-model-1372312) / [Free3D](https://free3d.com/3d-model/sea-doo-rxt-x-300-red-performance-watercraft-2019-8850.html) | about $41 to $79 | about 85,000 polygons, **TurboSquid version is editorial only** |
+| Sea-Doo RXT 260 | [Free3D](https://free3d.com/3d-model/personal-watercraft-sea-doo-rxt260-2363.html) | about $39 | about 75,000 polygons |
+| Sea-Doo GTR 215 | [CGTrader](https://www.cgtrader.com/3d-models/watercraft/recreational-watercraft/sea-doo-gtr-215) / [RenderHub](https://www.renderhub.com/digitalart3d/sea-doo-gtr-215) | varies | |
+| Sea-Doo FishPro 2021 | [CGTrader](https://www.cgtrader.com/3d-models/watercraft/recreational-watercraft/seadoo-fishpro-2021) | varies | |
+| Sea-Doo high performance (RXP-style) | [RenderHub](https://www.renderhub.com/formadigitalcreative/seadoo-high-performance-jet-ski) | varies | |
+
+**No RXP-X model** turned up, free or paid.
+
+**Recommendation for the game:** Start with the free **BoatUS GTI SE 130** (real Sea-Doo shape) or the **UNDERPOLY** low-poly ski to build the physics. Then, if you want a modern Sea-Doo look, buy the **$15 CGTrader GTX 325** because it already has a game-ready version.
+
+---
+
 ## 8. Gaps and things to check later
 
 - No source gave a measured **lean angle** for the T3-R hull, the exact **CG position**, or **moments of inertia**. These need tuning by feel.
