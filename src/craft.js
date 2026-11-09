@@ -29,7 +29,7 @@ export const CRAFTS = {
     keelArea: 0.011,        // m^2 side-force element (est, tuned)
     pumpArea: 0.003,
     sideForceDrop: 0.05,     // m: hull side force acts this far below the CG (est)
-    sponsonArea: 0.012,        // m^2 per sponson (est)
+    sponsonArea: 0.018,        // m^2 per sponson (est)
     sponsonDrop: 0.035,       // m below the chine at the middle setting (est)
     cgBase: [0, 0.0, -0.5], // hull CG in body frame (est: engine low, aft of middle, balanced over the centre of buoyancy)
     inertia: [95, 430, 410],  // roll, yaw, pitch kg m^2 about hull CG (est)

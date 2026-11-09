@@ -22,9 +22,9 @@ export const CONDITIONS = {
   chop: {
     label: 'Lake chop',
     waves: [
-      { len: 6.5, amp: 0.10, dir: 10 }, { len: 4.2, amp: 0.07, dir: -35 },
-      { len: 9.0, amp: 0.08, dir: 55 }, { len: 3.0, amp: 0.035, dir: 100 },
-      { len: 12, amp: 0.06, dir: -80 }, { len: 2.2, amp: 0.02, dir: 150 },
+      { len: 8.0, amp: 0.045, dir: 10 }, { len: 5.2, amp: 0.03, dir: -35 },
+      { len: 11, amp: 0.04, dir: 55 }, { len: 3.4, amp: 0.014, dir: 100 },
+      { len: 14, amp: 0.035, dir: -80 }, { len: 2.4, amp: 0.008, dir: 150 },
     ],
   },
   swell: {
@@ -88,7 +88,18 @@ export class Ocean {
     this.wakeIdx = (this.wakeIdx + 1) % WAKE_N;
   }
 
-  // Height only (cheap): used by particles and buoys.
+  // Waves only, no wake: cheapest, for thousands of spray particles.
+  baseHeight(x, z) {
+    const t = this.t, d = this.waveData;
+    let h = 0;
+    for (let i = 0; i < this.waveCount; i++) {
+      const o = i * 6;
+      h += d[o + 4] * Math.sin(d[o + 2] * (d[o] * x + d[o + 1] * z) - d[o + 3] * t + d[o + 5]);
+    }
+    return h;
+  }
+
+  // Height including wake: used by buoys and the hull.
   height(x, z, minAge = 0) {
     const t = this.t, d = this.waveData;
     let h = 0;

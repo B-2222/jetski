@@ -172,6 +172,8 @@ export class Ski {
       }
     }
     this.bottom = pts;
+    this.sprayPts = pts.filter((p) => p.chine || p.flare).map(() => ({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, nx: 0, ny: 0, nz: 0, f: 0, u: 0 }));
+    this.sprayCount = 0;
 
     // upper hull: sides and bow deck. Only pressure/drag, no buoyancy (prisms already cover it).
     const upper = [];
@@ -246,6 +248,7 @@ export class Ski {
     this.input = { throttle: 0, lever: 0, steer: 0, leanX: 0, leanZ: 0, stand: 0, trimUp: 0, trimDown: 0 };
     this.stats = {};
     this.accFilt = new V3();
+    this.accEj = new V3();
     this.prevVel = new V3();
     this.ejectReason = null;
     this.airTime = 0;
@@ -443,10 +446,11 @@ export class Ski {
     const fwdSpeed = vcg.dot(fwd);
     const horizSpeed = Math.hypot(vcg.x, vcg.z);
 
+    this.sprayCount = 0;
     // ---- hull bottom: buoyancy + planing pressure + friction ----
     let wetArea = 0, wetPts = 0, submergedVol = 0, chineL = 0, chineR = 0, bowWet = 0;
     let wetZmin = 99, wetZmax = -99;
-    const Cp = 1.15, Cf = 0.0042, cLin = 650, latK = c.hullLatGrip;
+    const Cp = 1.15, Cf = 0.0042, cLin = 1100, latK = c.hullLatGrip;
     const top = new V3();
     const latDir = left;
     for (const p of this.bottom) {
@@ -489,6 +493,12 @@ export class Ski {
         const vtl = vt.len();
         tmpF.addScaled(vt, -0.5 * RHO * Cf * p.areaSurf * vtl * wet);
         cat = p.flare ? 'flare' : 'bottom'; apply(tmpF, tmpW);
+        if ((p.chine || p.flare) && fp > 40 && this.sprayCount < this.sprayPts.length) {
+          const sp = this.sprayPts[this.sprayCount++];
+          sp.x = tmpW.x; sp.y = tmpW.y; sp.z = tmpW.z;
+          sp.vx = tmpV.x; sp.vy = tmpV.y + s.dhdt; sp.vz = tmpV.z;
+          sp.nx = tmpN.x; sp.ny = tmpN.y; sp.nz = tmpN.z; sp.f = fp; sp.u = p.u;
+        }
         wetArea += p.areaSurf * wet; wetPts++;
         if (p.u < wetZmin) wetZmin = p.u; if (p.u > wetZmax) wetZmax = p.u;
         if (p.chine) { if (p.t > 0) chineL += wet; else chineR += wet; }
@@ -580,7 +590,7 @@ export class Ski {
     // ---- jet pump & engine ----
     this.toWorld(this.intakePos, tmpW);
     const intakeDepth = oc.height(tmpW.x, tmpW.z, SELF_WAKE_AGE) - tmpW.y;
-    const wfTarget = smooth(-0.03, 0.06, intakeDepth);
+    const wfTarget = smooth(-0.05, 0.015, intakeDepth);
     this.waterFrac = approach(this.waterFrac, wfTarget, wfTarget > this.waterFrac ? 7 : 30, dt);
     const wf = this.waterFrac;
 
@@ -642,8 +652,10 @@ export class Ski {
     // ---- rider "body english": knees and feet push the hull ----
     if (this.riderOn) {
       const lx = clamp(this.input.leanX, -1, 1);
-      // right lean = roll to the right = positive rotation about the forward axis
-      tmpB.copy(fwd).scale(lx * 160);
+      // right lean = roll to the right = positive rotation about the forward axis.
+      // The rider pushes against the hull, which pushes against the water: no water, no torque.
+      const grip = clamp(wetArea / 0.5, 0, 1);
+      tmpB.copy(fwd).scale(lx * 160 * grip);
       T.add(tmpB);
       const airborne = wetPts === 0;
       if (airborne) { // small pitch control in the air (rider shifting body)
@@ -667,6 +679,9 @@ export class Ski {
       tmpF.set(0, -vcg.y * (300 + 55 * horizSpeed) * wetFrac, 0);
       F.add(tmpF);
     }
+
+    // ---- light aerodynamic damping of rotation (matters in the air) ----
+    T.addScaled(w, -25);
 
     // ---- integrate ----
     const accel = F.clone().scale(1 / this.mass);
@@ -735,6 +750,10 @@ export class Ski {
     this.accFilt.y += (sfy - this.accFilt.y) * k;
     this.accFilt.z += (sfz - this.accFilt.z) * k;
     st.gLat = -this.accFilt.x / G; st.gVert = this.accFilt.y / G; st.gLong = this.accFilt.z / G;
+    // slower filter for throwing the rider: people hold on through short jolts
+    const ke = Math.min(1, dt / 0.15);
+    const ae = this.accEj || (this.accEj = new V3());
+    ae.x += (sfx - ae.x) * ke; ae.y += (sfy - ae.y) * ke; ae.z += (sfz - ae.z) * ke;
     st.pumpState = wf < 0.5 ? 'AIR' : cavAmt > 0.35 ? 'CAVITATING' : 'HOOKED';
   }
 
@@ -754,10 +773,10 @@ export class Ski {
   // checks that throw the rider off. Returns a reason string or null.
   checkEjection() {
     if (!this.riderOn) return null;
-    const st = this.stats;
-    if (st.gLong < -2.7) return 'Stuffed the nose';
-    if (st.gVert > 8.5) return 'Landed too hard';
-    if (Math.abs(st.gLat) > 2.9) return 'Hooked and got thrown';
+    const st = this.stats, ae = this.accEj || new V3();
+    if (ae.z / G < -2.3) return 'Stuffed the nose';
+    if (st.gVert > 7.5 && ae.y / G > 4) return 'Landed too hard';
+    if (Math.abs(ae.x / G) > 2.4) return 'Hooked and got thrown';
     if (Math.abs(st.roll) > 95) return 'Rolled it';
     if (st.pitch > 70) return 'Blew over backwards';
     if (st.pitch < -65) return 'Nose dived';
